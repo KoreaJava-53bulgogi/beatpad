@@ -1,6 +1,8 @@
 // 곡 데이터로 노트(채보)를 만든다. 파이썬 버전 build_chart와 같은 규칙.
 
-export const CHART_VERSION = 1; // 규칙을 바꾸면 올린다 (랭킹이 버전별로 나뉨)
+// 채보 규칙이나 랭킹 방식을 바꾸면 올린다 (랭킹이 버전별로 나뉨)
+// 1: 첫 버전(로그인 없음)  2: Google 로그인 랭킹으로 새로 시작
+export const CHART_VERSION = 2;
 export const DIFFS = ["EASY", "NORMAL", "HARD"];
 const MIN_GAP = { EASY: 0.22, NORMAL: 0.11, HARD: 0.06 }; // 노트 사이 최소 간격(초)
 const MAX_GAP = { EASY: 1.0, NORMAL: 0.6, HARD: 9e9 }; // 이보다 오래 비면 엇박 노트로 채움

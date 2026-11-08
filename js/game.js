@@ -60,6 +60,8 @@ export class Game {
     this.holding = new Map();
     this.actx = null;
     this.onChange = () => {}; // 곡 목록/이름이 바뀌면 HTML 쪽에 알림
+    this.onSaveChange = () => {}; // 설정/기록이 바뀌면 계정에 저장하도록 알림
+    this.user = null; // 로그인하면 { uid }
 
     this._setupCanvas();
     canvas.addEventListener("pointerdown", (e) => this._pointer(e, true));
@@ -114,7 +116,10 @@ export class Game {
       if (this.submitState === "ready" && y > 560 && y < 640 && Math.abs(x - W / 2) < 200) btn(BTN.Y);
       else btn(BTN.A);
     } else if (this.state === "ranking") {
-      btn(BTN.B);
+      if (x < W / 3) btn(BTN.LEFT);
+      else if (x > (W * 2) / 3) btn(BTN.RIGHT);
+      else if (y < 130) btn(BTN.Y);
+      else btn(BTN.B);
     }
   }
 
@@ -149,12 +154,30 @@ export class Game {
     return Number.isInteger(i) && i >= 0 && i < Math.max(1, song.parts.length) ? i : song.defaultPart;
   }
 
-  boardId() {
-    return `${this.song.boardId}_p${this.partIdx()}_${DIFFS[this.save.diff]}_${this.save.long ? "L" : "N"}_v${CHART_VERSION}`;
+  boardId(diff = this.save.diff, long = this.save.long) {
+    return `${this.song.boardId}_p${this.partIdx()}_${DIFFS[diff]}_${long ? "L" : "N"}_v${CHART_VERSION}`;
   }
 
   writeSave() {
     try { localStorage.setItem(SAVE_KEY, JSON.stringify(this.save)); } catch { /* 저장 불가 */ }
+    this.onSaveChange();
+  }
+
+  /** 계정에서 불러온 설정의 곡을 고른다. 이 기기에 없는 MIDI 곡이면 지금 곡을 그대로 둔다. */
+  applySongFromSave() {
+    const i = this.songs.findIndex((s) => s.key === this.save.song);
+    if (i >= 0) this.songIdx = i;
+    else this.save.song = this.song.key;
+    this.onChange();
+  }
+
+  /** 로그인/로그아웃 됐을 때 main.js가 부른다. */
+  setUser(user) {
+    this.user = user;
+    if (this.state === "result" && rankingEnabled) {
+      if (user && this.submitState === "login") this.submitState = "ready";
+      if (!user && this.submitState === "ready") this.submitState = "login";
+    }
   }
 
   storeSongs() {
@@ -330,7 +353,9 @@ export class Game {
     }
     this.text("십자키 ↑↓ 항목 선택   ←→ 값 변경 (LB/RB: 싱크 ±5ms)   A 시작", 15, MUTED, W / 2, 634);
     this.text("레인: X(←) A(↓) Y(↑) B(→)   키보드: D F J K / 방향키, Enter 시작   화면 터치도 가능", 15, MUTED, W / 2, 658);
-    this.text(`이름: ${s.name}  (아래 입력칸에서 바꿀 수 있어요)`, 14, MUTED, W / 2, 682);
+    if (!rankingEnabled) this.text("온라인 랭킹 꺼짐 (firebase-config.js 설정 필요)", 14, MUTED, W / 2, 682);
+    else if (this.user) this.text(`로그인됨 · 닉네임 ${s.name} · 설정과 기록이 계정에 저장돼요`, 14, GREEN, W / 2, 682);
+    else this.text("로그인하지 않음 · 랭킹 등록과 기기 간 동기화는 아래 'Google로 로그인' 후 가능해요", 14, MUTED, W / 2, 682);
     this.drawPadStatus();
   }
 
@@ -341,34 +366,60 @@ export class Game {
 
   // ----- 랭킹 화면 -------------------------------------------------------
 
+  /** 랭킹 화면은 메뉴 설정과 따로 난이도/롱노트 조합을 바꿔 가며 볼 수 있다. */
   openRanking() {
     this.state = "ranking";
-    this.rankView = { board: this.boardId(), rows: null, error: null };
-    if (!rankingEnabled) { this.rankView.error = "firebase-config.js에 Firebase 설정을 넣으면 온라인 랭킹을 쓸 수 있어요."; return; }
-    const view = this.rankView;
-    fetchTop(view.board, 15).then((rows) => { view.rows = rows; }).catch((e) => { view.error = "랭킹을 불러오지 못했어요: " + e.message; });
+    this.rankView = { diff: this.save.diff, long: this.save.long };
+    this.loadRankView();
+  }
+
+  loadRankView() {
+    const v = this.rankView;
+    v.board = this.boardId(v.diff, v.long);
+    v.rows = null;
+    v.error = null;
+    if (!rankingEnabled) { v.error = "firebase-config.js에 Firebase 설정을 넣으면 온라인 랭킹을 쓸 수 있어요."; return; }
+    const board = v.board;
+    fetchTop(board, 15)
+      .then((rows) => { if (v.board === board) v.rows = rows; })
+      .catch((e) => { if (v.board === board) v.error = "랭킹을 불러오지 못했어요: " + e.message; });
   }
 
   update_ranking(events) {
-    for (const { kind, val } of events) if (kind === "btn" && val & (BTN.A | BTN.B | BTN.BACK | BTN.START)) { this.state = "menu"; return; }
+    const v = this.rankView;
+    for (const { kind, val } of events) {
+      if (kind !== "btn") continue;
+      if (val & (BTN.LEFT | BTN.RIGHT)) {
+        v.diff = (v.diff + (val & BTN.RIGHT ? 1 : DIFFS.length - 1)) % DIFFS.length;
+        this.loadRankView();
+      } else if (val & (BTN.Y | BTN.UP | BTN.DOWN)) {
+        v.long = !v.long;
+        this.loadRankView();
+      } else if (val & (BTN.A | BTN.B | BTN.BACK | BTN.START)) {
+        this.state = "menu";
+        return;
+      }
+    }
   }
 
   draw_ranking() {
     const v = this.rankView;
-    this.text("🏆 온라인 랭킹", 36, TEXT, W / 2, 60, { bold: true });
-    this.text(`${this.song.name} · ${DIFFS[this.save.diff]} · 롱노트 ${this.save.long ? "켜짐" : "꺼짐"}`, 17, MUTED, W / 2, 100, { maxW: W - 80 });
-    this.drawBoard(v.rows, v.error, W / 2 - 300, 140, 600, 15);
-    this.text("A / B / 터치: 메뉴로", 15, MUTED, W / 2, H - 30);
+    this.text("🏆 온라인 랭킹", 34, TEXT, W / 2, 46, { bold: true });
+    this.text(this.song.name, 16, MUTED, W / 2, 82, { maxW: W - 80 });
+    this.text(`◀  ${DIFFS[v.diff]}  ▶`, 22, ACCENT, W / 2 - 110, 116, { bold: true });
+    this.text(`롱노트 ${v.long ? "켜짐" : "꺼짐"}`, 18, v.long ? TEXT : MUTED, W / 2 + 120, 116);
+    this.drawBoard(v.rows, v.error, W / 2 - 300, 160, 600, 14);
+    this.text("←→ 난이도   ↑↓ / Y 롱노트 켜짐·꺼짐   A / B 메뉴로   (터치: 왼쪽·오른쪽 끝 = 난이도, 위 = 롱노트)", 14, MUTED, W / 2, H - 30);
   }
 
-  drawBoard(rows, error, x, y, w, maxRows, highlightName = null) {
+  drawBoard(rows, error, x, y, w, maxRows) {
     if (error) { this.text(error, 16, MISS_COLOR, x + w / 2, y + 40, { maxW: w }); return; }
     if (!rows) { this.text("불러오는 중...", 18, MUTED, x + w / 2, y + 40); return; }
     if (!rows.length) { this.text("아직 기록이 없어요. 첫 기록을 남겨 보세요!", 17, MUTED, x + w / 2, y + 40); return; }
     const narrow = w < 400;
     rows.slice(0, maxRows).forEach((r, i) => {
       const yy = y + i * (narrow ? 30 : 34);
-      if (highlightName && r.name === highlightName) this.roundRect(x, yy - 14, w, 28, 6, PANEL);
+      if (this.user && r.id === this.user.uid) this.roundRect(x, yy - 14, w, 28, 6, "#2a3a48"); // 내 기록
       const color = i === 0 ? GOLD : i < 3 ? TEXT : MUTED;
       this.text(`${i + 1}`, narrow ? 15 : 18, color, x + 24, yy, { bold: i < 3 });
       this.text(r.name, narrow ? 15 : 18, color, x + 50, yy, { align: "left", maxW: narrow ? 110 : 220 });
@@ -549,8 +600,9 @@ export class Game {
     const newBest = !best || score > best.score;
     if (newBest) { this.save.best[key] = { score, acc: Math.round(acc * 100) / 100, rank: rankFor(acc), fc }; this.writeSave(); }
     this.result = { score, acc, rank: rankFor(acc), fc, avgErr, newBest, notes: this.totalJudges, counts: { ...this.counts }, maxCombo: this.maxCombo };
-    this.submitState = rankingEnabled ? "ready" : "off";
-    this.myPos = null;
+    // off: 랭킹 없음, login: 로그인 필요, ready: 등록 가능, sending, done, error
+    this.submitState = !rankingEnabled ? "off" : this.user ? "ready" : "login";
+    this.submitRes = null;
     this.resultBoard = { board: this.boardId(), rows: null, error: null };
     if (rankingEnabled) this.loadResultBoard();
     this.state = "result";
@@ -707,15 +759,19 @@ export class Game {
   }
 
   submit() {
+    if (!this.user) { this.submitState = "login"; return; }
     this.submitState = "sending";
     const r = this.result;
     const entry = {
       name: this.save.name, score: r.score, acc: Math.round(r.acc * 100) / 100, rank: r.rank, fc: r.fc,
       maxCombo: r.maxCombo, song: this.song.name.slice(0, 80), diff: this.diff, long: this.save.long,
     };
-    submitScore(this.resultBoard.board, entry)
-      .then((pos) => { this.submitState = "done"; this.myPos = pos; this.loadResultBoard(); })
-      .catch((e) => { this.submitState = "error"; this.submitError = e.message; });
+    submitScore(this.resultBoard.board, this.user.uid, entry)
+      .then((res) => { this.submitState = "done"; this.submitRes = res; this.loadResultBoard(); })
+      .catch((e) => {
+        this.submitState = "error";
+        this.submitError = e.code === "permission-denied" ? "권한이 없어요. 보안 규칙을 새 버전으로 게시했는지 확인해 주세요." : e.message;
+      });
   }
 
   draw_result() {
@@ -747,14 +803,17 @@ export class Game {
     if (rankingEnabled) {
       const x0 = 640, w = 290;
       this.text("🏆 온라인 랭킹 TOP 10", 20, TEXT, x0 + w / 2, 60, { bold: true });
-      this.drawBoard(this.resultBoard.rows, this.resultBoard.error, x0, 100, w, 10, this.submitState === "done" ? this.save.name : null);
+      this.drawBoard(this.resultBoard.rows, this.resultBoard.error, x0, 100, w, 10);
       const by = 600;
-      if (this.submitState === "ready") {
+      const st = this.submitState, res = this.submitRes;
+      if (st === "ready") {
         this.roundRect(W / 2 - 200, by - 26, 400, 52, 12, PANEL);
         this.text(`Y 버튼 / R 키 / 여기를 터치: "${this.save.name}"(으)로 랭킹 등록`, 17, ACCENT, W / 2, by, { maxW: 380 });
-      } else if (this.submitState === "sending") this.text("등록 중...", 18, MUTED, W / 2, by);
-      else if (this.submitState === "done") this.text(this.myPos ? `등록 완료! 현재 ${this.myPos}위` : "등록 완료!", 20, GOLD, W / 2, by, { bold: true });
-      else if (this.submitState === "error") this.text("등록 실패: " + this.submitError, 15, MISS_COLOR, W / 2, by, { maxW: 800 });
+      } else if (st === "login") this.text("랭킹 등록은 로그인 후에 할 수 있어요 → 화면 아래 'Google로 로그인'", 16, MUTED, W / 2, by);
+      else if (st === "sending") this.text("등록 중...", 18, MUTED, W / 2, by);
+      else if (st === "done" && res.improved) this.text(res.pos ? `등록 완료! 현재 ${res.pos}위` : "등록 완료!", 20, GOLD, W / 2, by, { bold: true });
+      else if (st === "done") this.text(`기존 기록(${res.best.toLocaleString()}점${res.pos ? `, ${res.pos}위` : ""})이 더 높아서 그대로 뒀어요`, 17, MUTED, W / 2, by);
+      else if (st === "error") this.text("등록 실패: " + this.submitError, 15, MISS_COLOR, W / 2, by, { maxW: 800 });
     }
     this.text("A 버튼 / Enter / 터치: 메뉴로", 15, MUTED, W / 2, H - 28);
   }

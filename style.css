@@ -60,6 +60,16 @@ canvas {
 }
 .btn:hover { border-color: var(--accent); }
 .btn.ghost { background: transparent; color: var(--muted); }
+.btn.google { background: #fff; color: #1f1f1f; border-color: #fff; font-weight: 700; }
+.btn.google:hover { border-color: var(--accent); }
+.btn:disabled { opacity: 0.4; cursor: default; }
+[hidden] { display: none !important; }
+
+.divider {
+  width: 1px;
+  height: 24px;
+  background: #3a3d48;
+}
 
 .name {
   display: flex;

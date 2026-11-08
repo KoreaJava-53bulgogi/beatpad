@@ -17,10 +17,13 @@
         <input id="midi-file" type="file" accept=".mid,.midi,audio/midi,audio/x-midi" multiple hidden>
       </label>
       <button id="delete-song" class="btn ghost" type="button">지금 곡 삭제</button>
-      <label class="name">
-        이름
+      <span class="divider" aria-hidden="true"></span>
+      <button id="login" class="btn google" type="button" hidden>Google로 로그인</button>
+      <label id="name-box" class="name" hidden>
+        닉네임
         <input id="player-name" type="text" maxlength="12" autocomplete="off" spellcheck="false">
       </label>
+      <button id="logout" class="btn ghost" type="button" hidden>로그아웃</button>
     </div>
     <p class="hint">
       MIDI 파일은 이 브라우저 안에서만 읽고 저장해요(서버로 올라가지 않음). 파일을 화면에 끌어다 놓아도 돼요.
