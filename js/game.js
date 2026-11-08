@@ -62,6 +62,7 @@ export class Game {
     this.onChange = () => {}; // 곡 목록/이름이 바뀌면 HTML 쪽에 알림
     this.onSaveChange = () => {}; // 설정/기록이 바뀌면 계정에 저장하도록 알림
     this.user = null; // 로그인하면 { uid }
+    this.ensureProfile = async () => {}; // 계정 문서를 바로 저장 (main.js가 채움, 실패하면 throw)
 
     this._setupCanvas();
     canvas.addEventListener("pointerdown", (e) => this._pointer(e, true));
@@ -766,11 +767,17 @@ export class Game {
       name: this.save.name, score: r.score, acc: Math.round(r.acc * 100) / 100, rank: r.rank, fc: r.fc,
       maxCombo: r.maxCombo, song: this.song.name.slice(0, 80), diff: this.diff, long: this.save.long,
     };
-    submitScore(this.resultBoard.board, this.user.uid, entry)
+    let step = "계정 정보 저장";
+    // 보안 규칙이 계정 문서의 닉네임을 확인하므로, 등록 직전에 계정 문서를 확실히 저장해 둔다
+    this.ensureProfile()
+      .then(() => { step = "랭킹 기록"; return submitScore(this.resultBoard.board, this.user.uid, entry); })
       .then((res) => { this.submitState = "done"; this.submitRes = res; this.loadResultBoard(); })
       .catch((e) => {
         this.submitState = "error";
-        this.submitError = e.code === "permission-denied" ? "권한이 없어요. 보안 규칙을 새 버전으로 게시했는지 확인해 주세요." : e.message;
+        this.submitError = e.code === "permission-denied"
+          ? `${step} 단계에서 권한이 없다고 거절됐어요 (Firestore 규칙 확인 필요)`
+          : `${step} 실패: ${e.code || e.message}`;
+        console.warn("랭킹 등록 실패", step, e);
       });
   }
 

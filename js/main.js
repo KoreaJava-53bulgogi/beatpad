@@ -60,6 +60,12 @@ function saveNow() {
   });
 }
 
+// 랭킹 등록 직전에 부른다. 실패하면 오류를 그대로 넘겨서 어느 단계인지 보여 준다.
+game.ensureProfile = async () => {
+  clearTimeout(saveTimer);
+  if (game.user) await saveProfile(game.user.uid, cloudData());
+};
+
 // 설정이나 기록이 바뀌면 잠깐 모았다가 계정에 저장
 game.onSaveChange = () => {
   if (!game.user || syncing) return;
