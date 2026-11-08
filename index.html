@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>BEAT PAD</title>
+  <meta name="description" content="게임패드, 키보드, 터치로 즐기는 리듬 게임. MIDI 파일로 나만의 곡도 플레이할 수 있어요.">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><circle cx='20' cy='50' r='14' fill='%231e88e5'/><circle cx='40' cy='50' r='14' fill='%2343a047'/><circle cx='60' cy='50' r='14' fill='%23fdd835'/><circle cx='80' cy='50' r='14' fill='%23e53935'/></svg>">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <main>
+    <canvas id="game" width="960" height="720" aria-label="BEAT PAD 게임 화면"></canvas>
+    <div class="toolbar">
+      <label class="btn">
+        MIDI 곡 추가
+        <input id="midi-file" type="file" accept=".mid,.midi,audio/midi,audio/x-midi" multiple hidden>
+      </label>
+      <button id="delete-song" class="btn ghost" type="button">지금 곡 삭제</button>
+      <label class="name">
+        이름
+        <input id="player-name" type="text" maxlength="12" autocomplete="off" spellcheck="false">
+      </label>
+    </div>
+    <p class="hint">
+      MIDI 파일은 이 브라우저 안에서만 읽고 저장해요(서버로 올라가지 않음). 파일을 화면에 끌어다 놓아도 돼요.
+    </p>
+  </main>
+  <div id="drop" class="drop" hidden>여기에 MIDI 파일을 놓으세요</div>
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

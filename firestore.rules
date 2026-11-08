@@ -1,0 +1,31 @@
+rules_version = '2';
+
+// BEAT PAD 랭킹용 Firestore 보안 규칙.
+// Firebase 콘솔 → Firestore Database → 규칙 탭에 이 내용을 그대로 붙여 넣고 "게시"하세요.
+// - 누구나 랭킹을 읽을 수 있다.
+// - 새 기록은 형식이 맞을 때만 쓸 수 있다. 수정/삭제는 아무도 못 한다.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isValidScore(d) {
+      return d.keys().hasOnly(['name', 'score', 'acc', 'rank', 'fc', 'maxCombo', 'song', 'diff', 'long', 'createdAt'])
+        && d.keys().hasAll(['name', 'score', 'acc', 'rank', 'fc', 'createdAt'])
+        && d.name is string && d.name.size() >= 1 && d.name.size() <= 12
+        && d.score is int && d.score >= 0 && d.score <= 1000000
+        && d.acc is number && d.acc >= 0 && d.acc <= 100
+        && d.rank in ['S', 'A', 'B', 'C', 'D']
+        && d.fc is bool
+        && (!('maxCombo' in d) || (d.maxCombo is int && d.maxCombo >= 0 && d.maxCombo <= 100000))
+        && (!('song' in d) || (d.song is string && d.song.size() <= 80))
+        && (!('diff' in d) || d.diff in ['EASY', 'NORMAL', 'HARD'])
+        && (!('long' in d) || d.long is bool)
+        && d.createdAt == request.time;
+    }
+
+    match /leaderboards/{board}/scores/{scoreId} {
+      allow read: if true;
+      allow create: if isValidScore(request.resource.data);
+      allow update, delete: if false;
+    }
+  }
+}
